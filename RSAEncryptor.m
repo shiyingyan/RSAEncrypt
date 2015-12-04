@@ -161,9 +161,4 @@
     return [[NSBundle mainBundle] pathForResource:@"private_key" ofType:@"p12"];
 }
 
--(void)dealloc{
-//    CFRelease(_publicKey);
-//    CFRelease(_privateKey);
-}
-
 @end
