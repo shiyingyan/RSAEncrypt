@@ -76,10 +76,16 @@
     OSStatus status = SecKeyDecrypt(key, kSecPaddingPKCS1, cipher, cipherLen, plain, &plainLen);
     
     if (status != noErr) {
+        if( cipher )  free(cipher);
+        if( plain ) free(plain);
         return nil;
     }
     
     NSData *decryptedData = [[NSData alloc] initWithBytes:(const void *)plain length:plainLen];
+    
+    if( cipher )  free(cipher);
+    if( plain ) free(plain);
+
     
     return decryptedData;
 }
@@ -95,6 +101,17 @@
     SecTrustResultType trustResult;
     if (status == noErr) {
         status = SecTrustEvaluate(myTrust, &trustResult);
+        if( status != noErr ){
+            CFRelease(myCertificate);
+            CFRelease(myPolicy);
+            CFRelease(myTrust);
+            return nil;
+        }
+    }else{
+        CFRelease(myCertificate);
+        CFRelease(myPolicy);
+        CFRelease(myTrust);
+        return nil;
     }
     SecKeyRef securityKey = SecTrustCopyPublicKey(myTrust);
     CFRelease(myCertificate);
