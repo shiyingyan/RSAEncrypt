@@ -66,28 +66,55 @@
     return result;
 }
 
+//解密的大小通加密一样，受限于SeckeyDecrypt函数SecKeyDecrypt要求密文和密钥的长度一致，如果解密更长的内容，需要把内容按密钥长度分成多份，然后多次调用SeckeyDecrypt来实现
 -(NSData*) rsaDecryptData:(NSData*)data{
     SecKeyRef key = self.privateKey;
-    size_t cipherLen = [data length];
-    void *cipher = malloc(cipherLen);
-    [data getBytes:cipher length:cipherLen];
-    size_t plainLen = SecKeyGetBlockSize(key) - 12;
-    void *plain = malloc(plainLen);
-    OSStatus status = SecKeyDecrypt(key, kSecPaddingPKCS1, cipher, cipherLen, plain, &plainLen);
-    
-    if (status != noErr) {
-        if( cipher )  free(cipher);
-        if( plain ) free(plain);
-        return nil;
+    size_t plainBufferSize = SecKeyGetBlockSize(key);
+    uint8_t *plainBuffer = malloc(plainBufferSize * sizeof(uint8_t));
+    size_t blockSize = plainBufferSize;      //分段解密
+    size_t blockCount = (size_t)ceil([data length]/(double)blockSize);
+    NSMutableData *decryptedData = [NSMutableData data];
+    for (int i=0; i<blockCount; i++) {
+        int bufferSize = (int)MIN(blockSize, [data length]-i*blockSize);
+        NSData *buffer = [data subdataWithRange:NSMakeRange(i*blockSize, bufferSize)];
+        OSStatus status = SecKeyDecrypt(key, kSecPaddingPKCS1, (const uint8_t *)[buffer bytes], [buffer length], plainBuffer, &plainBufferSize);
+        if( status==noErr ){
+            NSData *decryptedBytes = [[NSData alloc] initWithBytes:(const void *)plainBuffer length:plainBufferSize];
+            [decryptedData appendData:decryptedBytes];
+        }else{
+            if( plainBuffer ){
+                free(plainBuffer);
+            }
+            return nil;
+        }
+    }
+    if( plainBuffer ){
+        free(plainBuffer);
     }
     
-    NSData *decryptedData = [[NSData alloc] initWithBytes:(const void *)plain length:plainLen];
-    
-    if( cipher )  free(cipher);
-    if( plain ) free(plain);
-
-    
     return decryptedData;
+
+//    SecKeyRef key = self.privateKey;
+//    size_t cipherLen = [data length];
+//    void *cipher = malloc(cipherLen);
+//    [data getBytes:cipher length:cipherLen];
+//    size_t plainLen = SecKeyGetBlockSize(key) - 12;
+//    void *plain = malloc(plainLen);
+//    OSStatus status = SecKeyDecrypt(key, kSecPaddingPKCS1, cipher, cipherLen, plain, &plainLen);
+//    NSLog(@"status = %d",status);
+//    if (status != noErr) {
+//        if( cipher )  free(cipher);
+//        if( plain ) free(plain);
+//        return nil;
+//    }
+//    
+//    NSData *decryptedData = [[NSData alloc] initWithBytes:(const void *)plain length:plainLen];
+//    
+//    if( cipher )  free(cipher);
+//    if( plain ) free(plain);
+//
+//    
+//    return decryptedData;
 }
 
 #pragma mark - Private Methods
@@ -144,12 +171,10 @@
 
 #pragma mark - lazy loading
 -(SecKeyRef)publicKey{
-    NSLog(@"publicKeyPath = %@",[self publicKeyPath]);
     NSData *derData = [NSData dataWithContentsOfFile:[self publicKeyPath]];
     return [self getPublicKeyRefrenceFromeData:derData];
 }
 -(SecKeyRef)privateKey{
-    NSLog(@"privatekeypath = %@",[self privateKeyPath]);
     NSData *p12Data = [NSData dataWithContentsOfFile:[self privateKeyPath]];
     return [self getPrivateKeyRefrenceFromData:p12Data password:@"abcd1234"];
 }
